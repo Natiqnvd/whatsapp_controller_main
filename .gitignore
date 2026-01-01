@@ -1,0 +1,65 @@
+node_modules/
+frontend/node_modules/
+# === Frontend (React/Vite) ===
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Logs
+frontend/logs/
+frontend/*.log
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/lerna-debug.log*
+
+# Root build artifacts (Electron/global)
+dist/
+dist-ssr/
+*.local
+frontend/dist-electron
+
+# Editor directories and files
+frontend/.vscode/*
+!frontend/.vscode/extensions.json
+frontend/.idea/
+frontend/.DS_Store
+frontend/*.suo
+frontend/*.ntvs*
+frontend/*.njsproj
+frontend/*.sln
+frontend/*.sw?
+node_modules/electron/dist/electron.exe 
+
+# === Backend (Python) ===
+backend/.env
+backend/build/*
+backend/dist/*
+backend/__pycache__/
+backend/*.pyc
+backend/*.csv
+backend/backend.spec
+backend/uploads/*
+backend/thumbnails/*
+backend/contacts/*
+backend/@AutomationLog.txt
+backend/*.log
+help/*
+
+# === Electron/Global ===
+dist/
+release/
+node_modules/
+.DS_Store
+*.log
+*.exe   # Large binaries (use Git LFS if needed)
+*.dll   # Large binaries (use Git LFS if needed)
+uploads/*
+thumbnails/*
+
+# Python
+*/venv/
+*/.venv/
+*/__pycache__/
+*/*.pyc

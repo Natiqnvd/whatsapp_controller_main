@@ -1,0 +1,123 @@
+{
+  "name": "whatsapp-controller",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "An application for sending bulk WhatsApp messages by Natiqnvd",
+  "author": "Natiqnvd",
+  "main": "Electron/main.js",
+  "homepage": "./",
+  "scripts": {
+    "dev": "vite dev",
+    "electron:dev": "set NODE_ENV=development && concurrently \"npm run dev\" \"wait-on http://localhost:3434 && electron .\"",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "build:frontend": "vite build",
+    "build:backend": "cd ../backend && python build_backend.py",
+    "prebuild": "npm run build:backend",
+    "build": "npm run build:frontend && electron-builder --win",
+    "start": "electron .",
+    "dist": "npm run build"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/material": "^6.3.1",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-tabs": "^1.1.2",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tanstack/react-query": "^5.62.16",
+    "axios": "^1.7.9",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.1.1",
+    "react-toastify": "^11.0.5",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react-swc": "^3.8.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "electron": "^34.3.0",
+    "electron-builder": "^24.0.0",
+    "electron-vite": "^3.0.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "globals": "^15.14.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.0.5",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.natiqnvd.controller",
+    "productName": "WhatsApp Controller",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "Electron/**/*",
+      "dist/**/*",
+      "manifest.json",
+      "icons/**/*",
+      "!../backend/dist/*.spec"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/backend.exe",
+        "to": "backend.exe"
+      },
+      {
+        "from": "../backend/contacts",
+        "to": "contacts"
+      },
+      {
+        "from": "../backend/uploads",
+        "to": "uploads"
+      },
+      {
+        "from": "../backend/thumbnails",
+        "to": "thumbnails"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icons/icon-512x512.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "icons/icon-512x512.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "icons/icon-512x512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WhatsApp Controller",
+      "uninstallDisplayName": "Uninstall WhatsApp Controller",
+      "installerIcon": "icons/icon-512x512.ico"
+    }
+  }
+}
