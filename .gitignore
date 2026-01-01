@@ -63,3 +63,8 @@ thumbnails/*
 */.venv/
 */__pycache__/
 */*.pyc
+
+
+
+
+test.py
