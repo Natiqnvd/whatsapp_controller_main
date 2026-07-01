@@ -17,14 +17,14 @@ def open_chat_with_number(number):
     number = clean_number(number)
     url = f"whatsapp://send?phone={number}"
     os.startfile(url)
-    random_sleep(1.0, 2.0)
+    random_sleep(1.5, 2.5)
 
     # Detect WhatsApp window
     wa_window = auto.WindowControl(ClassName='WinUIDesktopWin32WindowClass', Name='WhatsApp')
     if not wa_window.Exists(10):
         return "WhatsApp not detected"
 
-    random_sleep(0.5, 1.0)
+    random_sleep(1.5, 2.5)
 
     if not number_validity(wa_window):
         return "Invalid Number"
@@ -32,7 +32,7 @@ def open_chat_with_number(number):
     return True
 
 def send_message_clipboard(message):
-    random_sleep(1.0, 2.5)
+    random_sleep(1.0, 3.0)
 
     # Copy message to clipboard
     pyperclip.copy(message)
@@ -40,11 +40,11 @@ def send_message_clipboard(message):
 
     # Paste from clipboard
     auto.SendKeys('{CTRL}v')
-    random_sleep(1.0, 2.5)
+    random_sleep(2.0, 3.5)
 
     # Send message
     auto.SendKeys('{ENTER}')
-    random_sleep(1.0, 2.5)
+    random_sleep(2.0, 3.5)
 
     return True
 
@@ -55,9 +55,9 @@ def send_attachment_clipboard(file_paths):
         copy_file_to_clipboard(file_path)
         random_sleep(1.0, 2.0)
         auto.SendKeys('{CTRL}v')
-        random_sleep(2.7, 4.0)
+        random_sleep(5.0, 7.0)
         auto.SendKeys('{ENTER}')
-        random_sleep(1.5, 3.0)
+        random_sleep(2.0, 3.0)
 
     return True
     

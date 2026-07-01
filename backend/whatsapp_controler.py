@@ -154,7 +154,7 @@ def send_defaulters_to_admin(no_number, invalid_number, batch_no, admin_no):
         
 def load_numbers_from_csv_due_bill(file_path):
     try:
-        df = pd.read_csv(file_path, header=None)
+        df = pd.read_csv(file_path, header=None, dtype={2: str})
         if df.shape[1] < 3:
             print("[ERROR]: CSV file must have at least three columns: Name, Number, and Balance!")
             sys.exit(1)
