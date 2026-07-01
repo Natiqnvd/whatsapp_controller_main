@@ -1,7 +1,6 @@
 import PyInstaller.__main__
 import os
 import shutil
-import sys
 
 def build_backend():
     # Define paths (assuming we're already in backend directory)
