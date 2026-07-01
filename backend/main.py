@@ -162,7 +162,7 @@ async def send_balances(request: dict):
                                 }) + "\n"
                                 
                                 if random.random() < 0.15:
-                                    await random_sleep(2, 4)
+                                    random_sleep(2, 4)
                                 
                             else:
                                 yield json.dumps({
@@ -189,10 +189,11 @@ async def send_balances(request: dict):
 
                         # Extra rest every few messages (VERY IMPORTANT)
                         if index > 0 and index % pause_after == 0:
-                            await asyncio.sleep(random.uniform(80, 100))
-                            print(f"Taking a longer break after sending {index} messages.")
+                            pause = random.uniform(80, 100)
+                            print(f"Taking a longer break of {pause:.2f} seconds. Total sent: {index} messages.")
                             pause_after = random.randint(12, 20)
                             print(f"New pause after: {pause_after} messages.")
+                            await asyncio.sleep(pause)
                             
                     except Exception as e:
                         yield json.dumps({
@@ -427,7 +428,7 @@ async def send_attachments(
                         "message": f"Completed batch {batch_index + 1}/{len(batches)}. Waiting longer before next batch.",
                         "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
                     }) + "\n"
-                    await random_sleep(min_batch_delay, max_batch_delay)
+                    random_sleep(min_batch_delay, max_batch_delay)
                     
             close_whatsapp()
                 
