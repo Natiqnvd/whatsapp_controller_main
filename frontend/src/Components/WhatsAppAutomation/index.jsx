@@ -16,13 +16,12 @@ const WhatsAppController = () => {
     csvTextArea:"Name,Balance,Number",
     results: [],
     isLoading: false,
-    isPaused: false,
-    isCancelled: false,
     error: "",
     message: "{name}\nCurrent balance: Rs. {balance}\n*بقایا رقم*: Rs. {balance}\n*نوید سنز* بابو بازار صدر\n*NAVEED SONS* - Babu Bazaar, Saddar",
     preview: "",
     totalContacts: 0,
-    processedCount: 0
+    processedCount: 0,
+    statusMessage: ""
   });
 
   const [attachmentState, setAttachmentState] = useState({

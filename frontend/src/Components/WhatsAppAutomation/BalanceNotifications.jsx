@@ -20,6 +20,7 @@ const BalanceNotifications = ({ state, updateState, adminNumber }) => {
     preview,
     totalContacts,
     processedCount,
+    statusMessage,
   } = state;
 
   const applyWhatsAppFormatting = (text) => {
@@ -137,15 +138,25 @@ const BalanceNotifications = ({ state, updateState, adminNumber }) => {
     }
   };
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
+  const processUploadedFile = async (file) => {
     if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    const isPDF = lowerName.endsWith(".pdf");
+    const isCSV = lowerName.endsWith(".csv");
+
+    if (!isPDF && !isCSV) {
+      updateState({ error: "Only .csv or .pdf files are supported." });
+      return;
+    }
+
+    const endpoint = isPDF ? API_ENDPOINTS.UPLOAD_PDF_BALANCES : API_ENDPOINTS.UPLOAD_CSV_BALANCES;
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      const response = await fetch(API_ENDPOINTS.UPLOAD_CSV_BALANCES, {
+      const response = await fetch(endpoint, {
         method: "POST",
         body: formData,
       });
@@ -155,7 +166,7 @@ const BalanceNotifications = ({ state, updateState, adminNumber }) => {
       }
 
       const result = await response.json();
-      
+
       if (!result.data || !Array.isArray(result.data)) {
         throw new Error("Invalid data format received from server");
       }
@@ -166,7 +177,7 @@ const BalanceNotifications = ({ state, updateState, adminNumber }) => {
         selectedFile: file,
         error: ""
       });
-      
+
       if (result.data.length > 0) {
         updatePreview(message, result.data[0]);
       }
@@ -178,6 +189,19 @@ const BalanceNotifications = ({ state, updateState, adminNumber }) => {
         selectedFile: null
       });
     }
+  };
+
+  const handleFileUpload = (event) => {
+    processUploadedFile(event.target.files[0]);
+  };
+
+  const handleFileDrop = (event) => {
+    event.preventDefault();
+    processUploadedFile(event.dataTransfer.files[0]);
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
   };
 
 const handleSendMessages = async () => {
@@ -192,7 +216,7 @@ const handleSendMessages = async () => {
     return;
   }
 
-  updateState({ isLoading: true, error: "", processedCount: 0, results: [] });
+  updateState({ isLoading: true, error: "", processedCount: 0, results: [], statusMessage: "" });
 
   try {
     const response = await fetch(API_ENDPOINTS.SEND_BALANCES, {
@@ -226,6 +250,15 @@ const handleSendMessages = async () => {
       for (const line of lines) {
         try {
           const update = JSON.parse(line);
+
+          // "info" updates (e.g. the periodic anti-detection breaks) aren't
+          // a per-contact result — show them in the status bar instead of
+          // counting them as a processed contact.
+          if (update.status === "info") {
+            updateState({ statusMessage: update.message });
+            continue;
+          }
+
           currentProcessedCount++;
           currentResults.push(update);
           updateState({
@@ -237,10 +270,21 @@ const handleSendMessages = async () => {
         }
       }
     }
+
+    // Under normal operation the backend yields exactly one result per
+    // contact, so if the stream closed with fewer than that, something
+    // went wrong server-side (crash, WhatsApp closed, connection dropped)
+    // without an explicit error — make sure that's visible instead of the
+    // spinner just quietly disappearing.
+    if (currentProcessedCount < csvData.length) {
+      updateState({
+        error: `Sending stopped unexpectedly after ${currentProcessedCount} of ${csvData.length} contacts. The remaining ${csvData.length - currentProcessedCount} contact(s) were not sent — check the results below and resend if needed.`
+      });
+    }
   } catch (err) {
     updateState({ error: "Error sending messages: " + err.message });
   } finally {
-    updateState({ isLoading: false });
+    updateState({ isLoading: false, statusMessage: "" });
   }
 };
 
@@ -345,6 +389,13 @@ const handleSendMessages = async () => {
         </div>
       )}
 
+      {isLoading && statusMessage && (
+        <div className="flex items-center gap-2 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 mt-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {statusMessage}
+        </div>
+      )}
+
       {error && <ErrorCard error={error} />}
 
       <div className="space-y-6">
@@ -353,12 +404,43 @@ const handleSendMessages = async () => {
             <CardTitle>Add Contact List</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="paste" className="w-full">
+            <Tabs defaultValue="upload" className="w-full">
               <TabsList className="grid grid-cols-2 gap-4 mb-6">
-                <TabsTrigger value="paste">Paste CSV</TabsTrigger>
                 <TabsTrigger value="upload">Upload File</TabsTrigger>
+                <TabsTrigger value="paste">Paste CSV</TabsTrigger>
               </TabsList>
-              
+
+              <TabsContent value="upload">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-center w-full">
+                    <label
+                      onDrop={handleFileDrop}
+                      onDragOver={handleDragOver}
+                      className="flex flex-col items-center justify-center w-full h-64 mt-4 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100"
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
+                        </svg>
+                        <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                        <p className="text-xs text-gray-500">CSV or PDF file</p>
+                      </div>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".csv,.pdf"
+                        onChange={handleFileUpload}
+                      />
+                    </label>
+                  </div>
+                  {selectedFile && (
+                    <div className="text-sm text-gray-600">
+                      Selected file: {selectedFile.name}
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
               <TabsContent value="paste">
               <div className="space-y-2">
                 <div className="text-sm text-gray-600 mb-2 mt-2">
@@ -382,33 +464,6 @@ const handleSendMessages = async () => {
                 </div>
               </div>
             </TabsContent>
-
-              <TabsContent value="upload">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-center w-full">
-                    <label className="flex flex-col items-center justify-center w-full h-64 mt-4 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
-                          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
-                        </svg>
-                        <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                        <p className="text-xs text-gray-500">CSV file only</p>
-                      </div>
-                      <input 
-                        type="file" 
-                        className="hidden" 
-                        accept=".csv"
-                        onChange={handleFileUpload}
-                      />
-                    </label>
-                  </div>
-                  {selectedFile && (
-                    <div className="text-sm text-gray-600">
-                      Selected file: {selectedFile.name}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
@@ -441,6 +496,7 @@ const handleSendMessages = async () => {
                     <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
                     <p className="text-lg font-arial" dangerouslySetInnerHTML={{ __html: preview }} />
                   </div>
+
                     <Button onClick={handleSendMessages} disabled={isLoading} className="w-full">
                         {isLoading ? (
                         <>

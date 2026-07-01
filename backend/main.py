@@ -12,7 +12,6 @@ from datetime import datetime
 import json
 import os
 from typing import List, Optional
-from threading import Event
 import asyncio
 from pydantic import BaseModel
 import uvicorn
@@ -20,10 +19,9 @@ from backend.whatsapp_controler import (number_search, open_whatsapp, send_messa
                                 send_defaulters_to_admin, send_image_attachments, send_pdf_attachments,
                                 close_whatsapp)
 from backend.whatsapp_controller_after_update import open_chat_with_number, send_message_clipboard, send_attachment_clipboard
-from backend.helper import clean_number, random_sleep, save_uploaded_file, remove_file
+from backend.helper import clean_number, save_uploaded_file, remove_file
 from backend.config import Settings
-
-stop_event = Event()
+from backend.pdf_extractor import extract_balances_from_pdf
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -66,15 +64,13 @@ async def upload_csv_balances(file: UploadFile = File(...)):
         df = pd.read_csv(pd.io.common.BytesIO(contents), header=None)
         if df.shape[1] < 3:
             raise HTTPException(status_code=400, detail="CSV must have at least three columns: Name, Number, and Balance")
-        
+
         data = []
         for _, row in df.iterrows():
             name = str(row[0]).strip().upper()
             balance_str = str(row[1]).strip()
             number = str(row[2]).strip()
-            
-            number = clean_number(number)
-            
+
             try:
                 balance = int(float(balance_str))
             except ValueError:
@@ -91,6 +87,28 @@ async def upload_csv_balances(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/upload-pdf-balances/")
+async def upload_pdf_balances(file: UploadFile = File(...)):
+    """Extract a Name, Balance, Number table from an uploaded PDF (e.g. an
+    'Outstanding Balances Report') and return it in the same shape as
+    /upload-csv-balances/. Extraction logic lives in pdf_extractor.py."""
+    try:
+        contents = await file.read()
+        data = extract_balances_from_pdf(contents)
+
+        if not data:
+            raise HTTPException(
+                status_code=400,
+                detail="No Name/Balance/Number table could be found in the PDF."
+            )
+
+        return {"data": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/send-balances/")
 async def send_balances(request: dict):
     try:
@@ -102,7 +120,7 @@ async def send_balances(request: dict):
         
         no_number = []
         invalid_number = []
-        
+
         async def balances_sender():
             pause_after = random.randint(12, 20)
 
@@ -135,23 +153,29 @@ async def send_balances(request: dict):
                         await asyncio.sleep(random.uniform(0.5, 1.0))
                         continue
                     
+                    yield json.dumps({
+                        "status": "info",
+                        "message": f"Processing {entry['name']}...",
+                        "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                    }) + "\n"
+
                     try:
-                        clean_number_entry = clean_number(entry["number"])
-                        number_searching = open_chat_with_number(clean_number_entry)
-                        # number_searching = number_search(window, entry["number"])
+                        # Runs the blocking desktop-automation call in a worker
+                        # thread so the event loop stays free to handle other
+                        # requests while this is in progress.
+                        number_searching = await asyncio.to_thread(open_chat_with_number, clean_number(entry["number"]))
                         await asyncio.sleep(random.uniform(0.8, 1.3))
 
                         if number_searching is True:
                             message_template = entry.get("messageTemplate", "")
                             message = message_template.format(
-                                name=entry["name"].upper(), 
+                                name=entry["name"].upper(),
                                 balance=int(float(entry["balance"]))
                             )
 
-                            random_sleep(1.0, 2.0)
+                            await asyncio.sleep(random.uniform(1.0, 2.0))
 
-                            # if send_message(window, message):
-                            if send_message_clipboard(message):
+                            if await asyncio.to_thread(send_message_clipboard, message):
                                 yield json.dumps({
                                     "name": entry["name"],
                                     "number": entry["number"],
@@ -160,10 +184,10 @@ async def send_balances(request: dict):
                                     "message": "Message sent successfully",
                                     "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
                                 }) + "\n"
-                                
+
                                 if random.random() < 0.15:
-                                    await random_sleep(2, 4)
-                                
+                                    await asyncio.sleep(random.uniform(2, 4))
+
                             else:
                                 yield json.dumps({
                                     "name": entry["name"],
@@ -185,15 +209,24 @@ async def send_balances(request: dict):
                                 "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
                             }) + "\n"
 
-                        random_sleep(1.0, 2.0)
+                        await asyncio.sleep(random.uniform(1.0, 2.0))
 
                         # Extra rest every few messages (VERY IMPORTANT)
                         if index > 0 and index % pause_after == 0:
-                            await asyncio.sleep(random.uniform(80, 100))
-                            print(f"Taking a longer break after sending {index} messages.")
+                            break_duration = random.uniform(80, 100)
+                            yield json.dumps({
+                                "status": "info",
+                                "message": f"Taking a short break after sending {index} messages ({int(break_duration)}s)...",
+                                "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                            }) + "\n"
+                            await asyncio.sleep(break_duration)
                             pause_after = random.randint(12, 20)
-                            print(f"New pause after: {pause_after} messages.")
-                            
+                            yield json.dumps({
+                                "status": "info",
+                                "message": "Break finished, resuming sending...",
+                                "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                            }) + "\n"
+
                     except Exception as e:
                         yield json.dumps({
                             "name": entry["name"],
@@ -205,13 +238,14 @@ async def send_balances(request: dict):
                         }) + "\n"
 
             finally:
-                send_defaulters_to_admin(
+                await asyncio.to_thread(
+                    send_defaulters_to_admin,
                     no_number,
                     invalid_number,
-                    batch_no=None,
-                    admin_no=clean_number(admin_no)
+                    None,
+                    clean_number(admin_no)
                 )
-                close_whatsapp()
+                await asyncio.to_thread(close_whatsapp)
             
         return StreamingResponse(balances_sender(), media_type="application/json")
     
@@ -255,7 +289,6 @@ async def send_attachments(
 
         if not admin_no or not admin_no.strip():
             raise HTTPException(status_code=400, detail="Admin number is required.")
-        stop_event.clear()
         processed_numbers = set()
         
         data = json.loads(data)
@@ -282,16 +315,6 @@ async def send_attachments(
                 for entry in batch:
                     number = clean_number(entry.get("number"))
                     name = entry.get("name")
-                    # if stop_event.is_set() or not check_whatsapp_focus(window):
-                    #     stop_event.set()
-                    #     yield json.dumps({
-                    #         "name": name,
-                    #         "number": number,
-                    #         "status": "stopped",
-                    #         "message": "Operation stopped",
-                    #         "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-                    #     }) + "\n"
-                    #     return
 
                     if number in processed_numbers:
                             yield json.dumps({
@@ -304,8 +327,8 @@ async def send_attachments(
                             continue
                     try:
                         # number_searching = number_search(window, number)
-                        number_searching = open_chat_with_number(number)
-                        random_sleep(2.0, 3.0)
+                        number_searching = await asyncio.to_thread(open_chat_with_number, number)
+                        await asyncio.sleep(random.uniform(2.0, 3.0))
                         
                         if number_searching == "Invalid Number":
                             invalid_number.append((name, number))
@@ -331,8 +354,8 @@ async def send_attachments(
                                     str(Settings.UPLOAD_DIR / filename)
                                     for filename in media_paths
                                 ]
-                                media_sent = send_attachment_clipboard(full_media_paths)
-                                random_sleep(1.4, 2.0)
+                                media_sent = await asyncio.to_thread(send_attachment_clipboard, full_media_paths)
+                                await asyncio.sleep(random.uniform(1.4, 2.0))
                                     
                             # Send PDF if it exists
                             if pdf_paths:
@@ -341,7 +364,7 @@ async def send_attachments(
                                     str(Settings.UPLOAD_DIR / filename)
                                     for filename in pdf_paths
                                 ]
-                                pdf_sent = send_attachment_clipboard(full_pdf_paths)
+                                pdf_sent = await asyncio.to_thread(send_attachment_clipboard, full_pdf_paths)
                                 await asyncio.sleep(random.uniform(1.4, 2.0))
                                     
                             # Send message if it exists
@@ -353,8 +376,8 @@ async def send_attachments(
                                     formatted_message = message_template
                                     
                                 # message_sent = send_message(window, formatted_message)
-                                message_sent = send_message_clipboard(formatted_message)
-                                random_sleep(1.4, 2.0)
+                                message_sent = await asyncio.to_thread(send_message_clipboard, formatted_message)
+                                await asyncio.sleep(random.uniform(1.4, 2.0))
                                 
                                 
                             # Determine status and summary message
@@ -416,7 +439,7 @@ async def send_attachments(
                         }) + "\n"
                         
                 batch_no = f"{batch_index + 1}/{total_batches}"
-                send_defaulters_to_admin(None, invalid_number, batch_no, clean_number(admin_no))
+                await asyncio.to_thread(send_defaulters_to_admin, None, invalid_number, batch_no, clean_number(admin_no))
                 # close_whatsapp(window)
                 # window = None
 
@@ -427,9 +450,9 @@ async def send_attachments(
                         "message": f"Completed batch {batch_index + 1}/{len(batches)}. Waiting longer before next batch.",
                         "timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
                     }) + "\n"
-                    await random_sleep(min_batch_delay, max_batch_delay)
-                    
-            close_whatsapp()
+                    await asyncio.sleep(random.uniform(min_batch_delay, max_batch_delay))
+
+            await asyncio.to_thread(close_whatsapp)
                 
         return StreamingResponse(sender(), media_type="application/json")
     
@@ -501,15 +524,6 @@ async def remove_media(filename: str):
 @app.delete("/pdf/remove")
 async def remove_pdf(filename: str):
     return await remove_file(filename, "PDF")
-
-@app.post("/stop/")
-async def stop_operation():
-    try:
-        stop_event.set()
-        return {"message": "Stop signal sent. Running operations will be stopped."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 # Contact Management Models
 class Contact(BaseModel):
@@ -737,4 +751,4 @@ async def simple_health_check():
 
 if __name__ == "__main__":
     print("Starting FastAPI server...")
-    uvicorn.run(app, host="127.0.0.1", port=5690)  # Change to 0.0.0.0 for broader access
+    uvicorn.run(app, host="127.0.0.1", port=Settings.BACKEND_PORT)  # Change to 0.0.0.0 for broader access

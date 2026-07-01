@@ -3,8 +3,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-const BACKEND_PORT = 5690 ; // Change this to your backend port
-const FRONTEND_PORT = 3434; // Change this to your frontend port
+const BACKEND_PORT = 47291; // Change this to your backend port
+const FRONTEND_PORT = 47292; // Change this to your frontend port
 
 export default defineConfig({
   plugins: [

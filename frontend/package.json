@@ -4,19 +4,15 @@
   "type": "module",
   "description": "An application for sending bulk WhatsApp messages by Natiqnvd",
   "author": "Natiqnvd",
-  "main": "Electron/main.js",
+  "main": "Electron/main.cjs",
   "homepage": "./",
   "scripts": {
     "dev": "vite dev",
-    "electron:dev": "set NODE_ENV=development && concurrently \"npm run dev\" \"wait-on http://localhost:3434 && electron .\"",
+    "electron:dev": "set NODE_ENV=development&& concurrently \"npm run dev\" \"wait-on http://localhost:47292 && electron .\"",
     "lint": "eslint .",
     "preview": "vite preview",
     "build:frontend": "vite build",
-    "build:backend": "cd ../backend && python build_backend.py",
-    "prebuild": "npm run build:backend",
-    "build": "npm run build:frontend && electron-builder --win",
-    "start": "electron .",
-    "dist": "npm run build"
+    "start": "electron ."
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -64,7 +60,7 @@
     "appId": "com.natiqnvd.controller",
     "productName": "WhatsApp Controller",
     "directories": {
-      "output": "dist-electron"
+      "output": "release"
     },
     "files": [
       "Electron/**/*",
@@ -77,18 +73,6 @@
       {
         "from": "../backend/dist/backend.exe",
         "to": "backend.exe"
-      },
-      {
-        "from": "../backend/contacts",
-        "to": "contacts"
-      },
-      {
-        "from": "../backend/uploads",
-        "to": "uploads"
-      },
-      {
-        "from": "../backend/thumbnails",
-        "to": "thumbnails"
       }
     ],
     "win": {

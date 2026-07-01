@@ -1,0 +1,12 @@
+fastapi==0.115.9
+uvicorn==0.34.0
+numpy==1.26.4
+pandas==2.2.3
+pdfplumber==0.11.10
+pyperclip==1.11.0
+uiautomation==2.0.20
+opencv-python==4.11.0.86
+pywin32==311
+pillow==12.2.0
+python-multipart==0.0.20
+pyinstaller==6.14.2

@@ -278,6 +278,18 @@ const AttachmentSender = ({ state, updateState, adminNumber }) => {
       updateState({ error: `PDF Upload Error: ${err.message}` });
     }
   };
+
+  // handleCSVUpload/handleMediaUpload/handlePDFUpload only read
+  // event.target.files, so dropped files can reuse them via this shim.
+  const makeDropHandler = (handler) => (event) => {
+    event.preventDefault();
+    handler({ target: { files: event.dataTransfer.files } });
+  };
+  const handleDragOver = (event) => event.preventDefault();
+
+  const handleCSVDrop = makeDropHandler(handleCSVUpload);
+  const handleMediaDrop = makeDropHandler(handleMediaUpload);
+  const handlePDFDrop = makeDropHandler(handlePDFUpload);
   
 
   const removeMedia = async (index) => {
@@ -777,7 +789,11 @@ const handleDownloadReport = () => {
                 <TabsContent value="upload">
                   <div className="space-y-4">
                     <div className="flex items-center justify-center w-full">
-                      <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
+                      <label
+                        onDrop={handleCSVDrop}
+                        onDragOver={handleDragOver}
+                        className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
+                      >
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                           <Upload className="w-8 h-8 mb-4 text-gray-500" />
                           <p className="mb-2 text-sm text-gray-500">
@@ -854,12 +870,14 @@ const handleDownloadReport = () => {
               />
               <label
                 htmlFor="media-upload"
+                onDrop={handleMediaDrop}
+                onDragOver={handleDragOver}
                 className={`flex items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50
                   ${mediaTab === 'medias' ? 'bg-blue-100' : ''}`}
               >
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <Image className="w-8 h-8 mb-4 text-gray-500" />
-                  <p className="text-sm text-gray-500">Click to upload Media</p>
+                  <p className="text-sm text-gray-500">Click to upload or drag and drop Media</p>
                   <p className="text-xs text-gray-400 mt-1">(Max file size: 100 MB)</p>
                 </div>
               </label>
@@ -904,12 +922,14 @@ const handleDownloadReport = () => {
                 />
                 <label
                   htmlFor="pdf-upload"
+                  onDrop={handlePDFDrop}
+                  onDragOver={handleDragOver}
                   className={`flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50
                     ${pdfTab === 'pdfs' ? 'bg-red-100': ''}`}
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <FileText className="w-8 h-8 mb-4 text-gray-500" />
-                    <p className="text-sm text-gray-500">Click to upload PDFs</p>
+                    <p className="text-sm text-gray-500">Click to upload or drag and drop PDFs</p>
                   </div>
                 </label>
 

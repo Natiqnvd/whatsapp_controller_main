@@ -63,8 +63,9 @@ thumbnails/*
 */.venv/
 */__pycache__/
 */*.pyc
-
+*/vscode
 
 
 
 test.py
+test_send_paragraphs.py

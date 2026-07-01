@@ -1,8 +1,7 @@
 import uiautomation as auto
-from backend.helper import random_sleep, copy_file_to_clipboard
+from backend.helper import random_sleep, copy_file_to_clipboard, clean_number
 import os
 import pyperclip
-
 
 def number_validity(wa_window):
     ok_btn = wa_window.ButtonControl(Name='OK')
@@ -15,7 +14,7 @@ def number_validity(wa_window):
     return True
 
 def open_chat_with_number(number):
-
+    number = clean_number(number)
     url = f"whatsapp://send?phone={number}"
     os.startfile(url)
     random_sleep(1.0, 2.0)

@@ -6,9 +6,10 @@ const net = require('net');
 
 let mainWindow;
 let backendProcess;
-let backendPort = 5690;
+let backendPort = 47291;
+const frontendPort = 47292;
 let isShuttingDown = false;
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = (process.env.NODE_ENV || '').trim() === 'development';
 
 // Enhanced backend health check with retry mechanism
 async function isBackendRunning(retries = 3, delay = 1000) {
@@ -148,7 +149,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       webSecurity: true
     },
     autoHideMenuBar: true,
@@ -160,8 +161,7 @@ function createWindow() {
 
   // Load appropriate content based on environment
   if (isDev) {
-    mainWindow.loadURL('http://localhost:3434');
-    mainWindow.webContents.openDevTools();
+    mainWindow.loadURL(`http://localhost:${frontendPort}`);
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
@@ -176,7 +176,7 @@ function createWindow() {
       return; // Allow close if already shutting down
     }
 
-    if (backendProcess && !backendProcess.killed) {
+    if (backendProcess) {
       console.log('Window close requested - preventing close and shutting down backend...');
       event.preventDefault();
       isShuttingDown = true;
@@ -223,16 +223,18 @@ async function startBackend() {
   let backendArgs = [];
 
   if (isDev) {
-    // Development: Start Python backend with uvicorn
+    // Development: Start Python backend with uvicorn.
+    // main.py uses absolute `backend.xxx` imports, so uvicorn must be run
+    // from the repo root as `backend.main:app`, not from inside backend/.
     backendPath = 'python';
-    backendArgs = ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', backendPort.toString(), '--reload'];
-    const backendDir = path.join(__dirname, '..', '..', 'backend');
-    
+    backendArgs = ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', backendPort.toString(), '--reload'];
+    const repoRoot = path.join(__dirname, '..', '..');
+
     console.log('Starting Python backend in development mode:', backendPath, backendArgs);
-    console.log('Backend directory:', backendDir);
-    
+    console.log('Backend directory:', repoRoot);
+
     backendProcess = spawn(backendPath, backendArgs, {
-      cwd: backendDir,
+      cwd: repoRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
       shell: false
@@ -298,108 +300,44 @@ async function startBackend() {
   return true;
 }
 
-// Enhanced backend termination function
+function execAsync(cmd) {
+  return new Promise((resolve) => {
+    exec(cmd, (err) => {
+      if (err) console.error(`Command failed (${cmd}):`, err.message);
+      resolve();
+    });
+  });
+}
+
+// Terminate the backend process (and any children it spawned, e.g. uvicorn
+// --reload's worker process). Headless Python console processes on Windows
+// don't respond to a graceful WM_CLOSE-style taskkill, so that path was
+// always failing after an 8s wait and leaving the backend running as an
+// orphan. Force-killing the whole process tree immediately is both correct
+// and much faster.
 async function terminateBackend() {
   if (!backendProcess) {
     console.log('No backend process to terminate');
     return;
   }
 
-  console.log(`Terminating backend process (PID: ${backendProcess.pid})...`);
+  const pid = backendProcess.pid;
+  console.log(`Force-killing backend process tree (PID: ${pid})...`);
 
-  return new Promise(async (resolve) => {
-    if (backendProcess.killed) {
-      console.log('Backend process already killed');
-      resolve();
-      return;
-    }
-
-    let resolved = false;
-    const resolveOnce = () => {
-      if (!resolved) {
-        resolved = true;
-        resolve();
-      }
-    };
-
-    // Set up timeout for forced termination
-    const forceKillTimeout = setTimeout(async () => {
-      if (resolved) return;
-      
-      console.warn('Backend did not terminate gracefully, force killing...');
-      
-      try {
-        const pid = backendProcess.pid;
-        
-        if (process.platform === 'win32') {
-          // Windows: Force kill process tree
-          exec(`taskkill /PID ${pid} /F /T`, (err) => {
-            if (err) console.error('Error during taskkill:', err.message);
-          });
-        } else {
-          // Unix: Send SIGKILL
-          try {
-            process.kill(pid, 'SIGKILL');
-          } catch (killError) {
-            console.error('Error sending SIGKILL:', killError.message);
-          }
-        }
-        
-        // Wait a bit then kill by port as a fallback
-        setTimeout(async () => {
-          await killProcessByPort(backendPort);
-          backendProcess = null;
-          resolveOnce();
-        }, 2000);
-        
-      } catch (error) {
-        console.error('Error during force kill:', error);
-        resolveOnce();
-      }
-    }, 8000); // Increased timeout
-
-    // Handle graceful termination
-    const onClose = () => {
-      console.log('Backend process terminated gracefully');
-      clearTimeout(forceKillTimeout);
-      backendProcess = null;
-      resolveOnce();
-    };
-
-    const onExit = () => {
-      console.log('Backend process exited');
-      clearTimeout(forceKillTimeout);
-      backendProcess = null;
-      resolveOnce();
-    };
-
-    // Set up one-time listeners
-    backendProcess.once('close', onClose);
-    backendProcess.once('exit', onExit);
-
-    // Attempt graceful termination
+  if (process.platform === 'win32') {
+    await execAsync(`taskkill /PID ${pid} /T /F`);
+  } else {
     try {
-      const pid = backendProcess.pid;
-      console.log(`Sending SIGTERM to process ${pid}`);
-      
-      if (process.platform === 'win32') {
-        // Windows: Try graceful termination first
-        exec(`taskkill /PID ${pid} /T`, (err) => {
-          if (err) {
-            console.error('Error during graceful taskkill:', err.message);
-            // If graceful kill fails, the timeout will handle force kill
-          }
-        });
-      } else {
-        // Unix: Try SIGTERM first
-        process.kill(pid, 'SIGTERM');
-      }
-    } catch (error) {
-      console.error('Error sending termination signal:', error);
-      clearTimeout(forceKillTimeout);
-      resolveOnce();
+      process.kill(pid, 'SIGKILL');
+    } catch (killError) {
+      console.error('Error sending SIGKILL:', killError.message);
     }
-  });
+  }
+
+  // Safety net in case any part of the tree survived under a different PID.
+  await killProcessByPort(backendPort);
+  backendProcess = null;
+  console.log('Backend process terminated.');
 }
 
 // Enhanced app shutdown handler
@@ -413,7 +351,7 @@ async function handleAppShutdown() {
   
   try {
     // Terminate backend first
-    if (backendProcess && !backendProcess.killed) {
+    if (backendProcess) {
       await terminateBackend();
     }
     
@@ -473,7 +411,7 @@ app.on('before-quit', async (event) => {
     return; // Allow quit if already shutting down
   }
   
-  if (backendProcess && !backendProcess.killed) {
+  if (backendProcess) {
     console.log('App is quitting, preventing quit to shutdown backend first...');
     event.preventDefault();
     

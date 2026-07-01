@@ -115,6 +115,14 @@ const ContactManager = ({ state, updateState }) => {
     }
   };
 
+  // handleCSVUpload only reads event.target.files, so dropped files can
+  // reuse it via this shim.
+  const handleCSVDrop = (event) => {
+    event.preventDefault();
+    handleCSVUpload({ target: { files: event.dataTransfer.files } });
+  };
+  const handleDragOver = (event) => event.preventDefault();
+
   const addContact = () => {
     if (!newContact.number.trim()) {
       updateState({ error: 'Please enter a phone number' });
@@ -421,7 +429,11 @@ const ContactManager = ({ state, updateState }) => {
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex items-center justify-center w-full">
-                    <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label
+                      onDrop={handleCSVDrop}
+                      onDragOver={handleDragOver}
+                      className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"
+                    >
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         <Upload className="w-8 h-8 mb-4 text-gray-500" />
                         <p className="mb-2 text-sm text-gray-500">
@@ -429,9 +441,9 @@ const ContactManager = ({ state, updateState }) => {
                         </p>
                         <p className="text-xs text-gray-500">CSV file with Name and Number columns</p>
                       </div>
-                      <input 
-                        ref={csvInputRef} 
-                        type="file" 
+                      <input
+                        ref={csvInputRef}
+                        type="file"
                         className="hidden" 
                         accept=".csv" 
                         onChange={handleCSVUpload} 
